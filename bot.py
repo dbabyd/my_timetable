@@ -3,7 +3,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Получаем токен из переменной окружения
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+BOT_TOKEN = os.getenv('8809640044:AAEzc6ROjT9C7zZuXBalz51GQOnFLeBnbiI')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start с голубой кнопкой"""
