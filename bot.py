@@ -151,7 +151,6 @@ def get_tasks_menu():
 
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📝 Мои задачи - подменю"""
-    print(f"DEBUG: Функция tasks() вызвана. Текст: {update.message.text}")
     await update.message.reply_text(
         '📝 <b>МОИ ЗАДАЧИ</b>\n\n'
         'Выбери опцию:',
@@ -433,9 +432,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text.strip()
     user_id = update.effective_user.id
     
-    # Логирование для отладки
-    print(f"DEBUG: Получено сообщение: '{user_message}' | Длина: {len(user_message)} | Код: {[ord(c) for c in user_message]}")
-    
     # Обработка добавления пары
     if context.user_data.get('adding_class'):
         try:
@@ -465,7 +461,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('deleting_class'):
         classes = db.get_classes(user_id)
         try:
-            # Пытаемся распарсить как номер
             class_num = int(user_message) - 1
             if 0 <= class_num < len(classes):
                 class_id = classes[class_num]['id']
@@ -475,7 +470,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await show_main_menu(update, context)
                     return
         except ValueError:
-            # Пытаемся удалить по названию
             if db.delete_class_by_name(user_id, user_message):
                 await update.message.reply_text(f'✅ Пара удалена!', parse_mode='HTML')
                 context.user_data['deleting_class'] = False
@@ -512,7 +506,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('deleting_task'):
         tasks = db.get_tasks(user_id)
         try:
-            # Пытаемся распарсить как номер
             task_num = int(user_message) - 1
             if 0 <= task_num < len(tasks):
                 task_id = tasks[task_num]['id']
@@ -522,7 +515,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await show_main_menu(update, context)
                     return
         except ValueError:
-            # Пытаемся удалить по названию
             if db.delete_task_by_name(user_id, user_message):
                 await update.message.reply_text(f'✅ Задача удалена!', parse_mode='HTML')
                 context.user_data['deleting_task'] = False
@@ -532,96 +524,155 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('❌ Задача не найдена.')
         return
     
-    # Главное меню - используем in вместо ==
-    if 'Мой день' in user_message:
-        await my_day(update, context)
-    elif 'Расписание' in user_message and 'Полный' not in user_message:
-        await schedule(update, context)
-    elif 'Мои задачи' in user_message:
-        print("DEBUG: Распознано 'Мои задачи', вызываю tasks()")
-        await tasks(update, context)
-    elif 'Полный календарь' in user_message:
-        await calendar(update, context)
-    elif 'Управление' in user_message:
-        await management(update, context)
-    elif 'Помощь' in user_message:
-        await help_command(update, context)
+    # ==================== ТОЧНАЯ ПРОВЕРКА КНОПОК ====================
     
-    # Расписание
-    elif user_message == '📅 Сегодня':
-        await schedule_today(update, context)
-    elif user_message == '📅 Завтра':
-        await schedule_tomorrow(update, context)
-    elif user_message == '📋 Неделя':
-        await schedule_week(update, context)
-    elif user_message == '📆 Месяц':
-        await schedule_month(update, context)
-    
-    # Задачи
-    elif user_message == '📅 Задачи на дату':
-        await tasks_by_date(update, context)
-    elif user_message == '📅 Задачи за период':
-        await tasks_by_period(update, context)
-    elif user_message == '📂 Задачи по категории':
-        await tasks_by_category(update, context)
-    elif user_message == '📋 Все задачи':
-        await all_tasks(update, context)
-    
-    # Календарь
-    elif user_message == '🗓 На дату':
-        await calendar_date(update, context)
-    elif user_message == '🗓 Завтра':
-        await calendar_tomorrow(update, context)
-    elif user_message == '🗓 Неделя':
-        await calendar_week(update, context)
-    elif user_message == '🗓 Месяц':
-        await calendar_month(update, context)
-    elif user_message == '🗓 Период':
-        await calendar_period(update, context)
-    
-    # Управление
-    elif user_message == '📚 Управление парами':
-        await manage_classes(update, context)
-    elif user_message == '📝 Управление задачами':
-        await manage_tasks(update, context)
-    elif user_message == '📂 Управление категориями':
-        await manage_categories(update, context)
-    elif user_message == '⏰ Напоминания':
-        await reminders(update, context)
-    
-    # Управление парами
-    elif user_message == '➕ Добавить пару':
-        await add_class(update, context)
-    elif user_message == '✏️ Изменить пару':
-        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ПАРУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
-    elif user_message == '🗑 Удалить пару':
-        await delete_class(update, context)
-    
-    # Управление задачами
-    elif user_message == '➕ Добавить задачу':
-        await add_task(update, context)
-    elif user_message == '✏️ Изменить задачу':
-        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ЗАДАЧУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
-    elif user_message == '🗑 Удалить задачу':
-        await delete_task(update, context)
-    
-    # Управление категориями
-    elif user_message == '📋 Мои категории':
-        await my_categories(update, context)
-    elif user_message == '➕ Добавить категорию':
-        await update.message.reply_text('➕ <b>ДОБАВИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
-    elif user_message == '✏️ Изменить категорию':
-        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
-    elif user_message == '🗑 Удалить категорию':
-        await update.message.reply_text('🗑 <b>УДАЛИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
-    
-    # Кнопка назад - показывает меню БЕЗ приветствия
-    elif 'Назад' in user_message:
+    # Кнопка назад - ПЕРВАЯ!
+    if '🔙' in user_message:
         await show_main_menu(update, context)
+        return
     
-    else:
-        print(f"DEBUG: Сообщение не распознано: '{user_message}'")
-        await update.message.reply_text('Не знаю такой команды. Используй меню выше 👆')
+    # Главное меню - более точные проверки
+    if user_message == '📊 Мой день':
+        await my_day(update, context)
+        return
+    
+    if user_message == '📅 Расписание':
+        await schedule(update, context)
+        return
+    
+    if user_message == '📝 Мои задачи':
+        await tasks(update, context)
+        return
+    
+    if user_message == '📆 Полный календарь':
+        await calendar(update, context)
+        return
+    
+    if user_message == '🔧 Управление':
+        await management(update, context)
+        return
+    
+    if user_message == 'ℹ️ Помощь':
+        await help_command(update, context)
+        return
+    
+    # Расписание подменю
+    if user_message == '📅 Сегодня':
+        await schedule_today(update, context)
+        return
+    
+    if user_message == '📅 Завтра':
+        await schedule_tomorrow(update, context)
+        return
+    
+    if user_message == '📋 Неделя':
+        await schedule_week(update, context)
+        return
+    
+    if user_message == '📆 Месяц':
+        await schedule_month(update, context)
+        return
+    
+    # Задачи подменю
+    if user_message == '📅 Задачи на дату':
+        await tasks_by_date(update, context)
+        return
+    
+    if user_message == '📅 Задачи за период':
+        await tasks_by_period(update, context)
+        return
+    
+    if user_message == '📂 Задачи по категории':
+        await tasks_by_category(update, context)
+        return
+    
+    if user_message == '📋 Все задачи':
+        await all_tasks(update, context)
+        return
+    
+    # Календарь подменю
+    if user_message == '🗓 На дату':
+        await calendar_date(update, context)
+        return
+    
+    if user_message == '🗓 Завтра':
+        await calendar_tomorrow(update, context)
+        return
+    
+    if user_message == '🗓 Неделя':
+        await calendar_week(update, context)
+        return
+    
+    if user_message == '🗓 Месяц':
+        await calendar_month(update, context)
+        return
+    
+    if user_message == '🗓 Период':
+        await calendar_period(update, context)
+        return
+    
+    # УПРАВЛЕНИЕ ПАРАМИ
+    if user_message == '📚 Управление парами':
+        await manage_classes(update, context)
+        return
+    
+    if user_message == '➕ Добавить пару':
+        await add_class(update, context)
+        return
+    
+    if user_message == '✏️ Изменить пару':
+        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ПАРУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        return
+    
+    if user_message == '🗑 Удалить пару':
+        await delete_class(update, context)
+        return
+    
+    # УПРАВЛЕНИЕ ЗАДАЧАМИ
+    if user_message == '📝 Управление задачами':
+        await manage_tasks(update, context)
+        return
+    
+    if user_message == '➕ Добавить задачу':
+        await add_task(update, context)
+        return
+    
+    if user_message == '✏️ Изменить задачу':
+        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ЗАДАЧУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        return
+    
+    if user_message == '🗑 Удалить задачу':
+        await delete_task(update, context)
+        return
+    
+    # УПРАВЛЕНИЕ КАТЕГОРИЯМИ
+    if user_message == '📂 Управление категориями':
+        await manage_categories(update, context)
+        return
+    
+    if user_message == '📋 Мои категории':
+        await my_categories(update, context)
+        return
+    
+    if user_message == '➕ Добавить категорию':
+        await update.message.reply_text('➕ <b>ДОБАВИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        return
+    
+    if user_message == '✏️ Изменить категорию':
+        await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        return
+    
+    if user_message == '🗑 Удалить категорию':
+        await update.message.reply_text('🗑 <b>УДАЛИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        return
+    
+    # Напоминания
+    if user_message == '⏰ Напоминания':
+        await reminders(update, context)
+        return
+    
+    # Если ничего не совпало
+    await update.message.reply_text('Не знаю такой команды. Используй меню выше 👆')
 
 # ==================== ОШИБКИ ====================
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
