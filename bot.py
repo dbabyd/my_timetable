@@ -4,7 +4,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Получаем токен
-BOT_TOKEN = '8809640044:AAEzc6ROjT9C7zZuXBalz51GQOnFLeBnbiI'
+BOT_TOKEN = '8924718816:AAHssdcvvw3K-ivD4BW9b0O4ZJ2vcMGFpC4'
 
 # Проверка токена
 if not BOT_TOKEN or BOT_TOKEN == 'YOUR_TOKEN_HERE':
