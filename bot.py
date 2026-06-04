@@ -39,6 +39,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=get_main_menu()
     )
 
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показывает главное меню без приветствия"""
+    await update.message.reply_text(
+        'Выбери действие:',
+        reply_markup=get_main_menu()
+    )
+
 # ==================== МОЙ ДЕНЬ ====================
 async def my_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📊 Мой день - показывает пары и задачи на сегодня"""
@@ -287,7 +294,7 @@ def get_categories_menu():
     """Подменю управления категориями"""
     keyboard = [
         ['📋 Мои категории', '➕ Добавить категорию'],
-        ['✏️ Изменить категорию', '🗑 Удалить категорию'],
+        ['✏️ Изменить категорию', '🗑 Удалить к��тегорию'],
         ['🔙 Назад']
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -421,9 +428,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif user_message == '🗑 Удалить категорию':
         await update.message.reply_text('🗑 <b>УДАЛИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
     
-    # Кнопка назад
+    # Кнопка назад - показывает меню БЕЗ приветствия
     elif user_message == '🔙 Назад в меню' or user_message == '🔙 Назад':
-        await start(update, context)
+        await show_main_menu(update, context)
     
     else:
         await update.message.reply_text('Не знаю такой команды. Используй меню выше 👆')
