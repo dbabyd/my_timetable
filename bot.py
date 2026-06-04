@@ -2,8 +2,10 @@ import os
 import sys
 import asyncio
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from aiohttp import web
+from database import db
+from datetime import datetime
 
 # Получаем токен
 BOT_TOKEN = '8924718816:AAHssdcvvw3K-ivD4BW9b0O4ZJ2vcMGFpC4'
@@ -49,12 +51,30 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== МОЙ ДЕНЬ ====================
 async def my_day(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📊 Мой день - показывает пары и задачи на сегодня"""
+    from datetime import datetime
+    user_id = update.effective_user.id
+    today = datetime.now().strftime('%d.%m')
+    
+    classes = db.get_classes_by_date(user_id, today)
+    tasks = db.get_tasks_by_date(user_id, today)
+    
+    classes_text = '\n'.join([
+        f"• <b>{c['name']}</b> - {c['start_time']}" + (f"-{c['end_time']}" if c['end_time'] else "") + 
+        (f" ({c['classroom']})" if c['classroom'] else "")
+        for c in classes
+    ]) if classes else "• нет пар"
+    
+    tasks_text = '\n'.join([
+        f"• <b>{t['name']}</b> - {t['status']}" + (f" ({t['category']})" if t['category'] else "")
+        for t in tasks
+    ]) if tasks else "• нет задач"
+    
     await update.message.reply_text(
-        '📊 <b>МОЙ ДЕНЬ</b>\n\n'
-        '⏰ <b>Пары на сегодня:</b>\n'
-        '• нет пар\n\n'
-        '📝 <b>Задачи на сегодня:</b>\n'
-        '• нет задач',
+        f'📊 <b>МОЙ ДЕНЬ ({today})</b>\n\n'
+        f'⏰ <b>Пары на сегодня:</b>\n'
+        f'{classes_text}\n\n'
+        f'📝 <b>Задачи на сегодня:</b>\n'
+        f'{tasks_text}',
         parse_mode='HTML'
     )
 
@@ -79,9 +99,19 @@ async def schedule(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def schedule_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📅 Расписание на сегодня"""
+    from datetime import datetime
+    user_id = update.effective_user.id
+    today = datetime.now().strftime('%d.%m')
+    
+    classes = db.get_classes_by_date(user_id, today)
+    classes_text = '\n'.join([
+        f"• <b>{c['name']}</b> - {c['start_time']}" + (f"-{c['end_time']}" if c['end_time'] else "") + 
+        (f" | {c['classroom']}" if c['classroom'] else "") + (f" | {c['teacher']}" if c['teacher'] else "")
+        for c in classes
+    ]) if classes else "• нет пар"
+    
     await update.message.reply_text(
-        '📅 <b>РАСПИСАНИЕ НА СЕГОДНЯ</b>\n\n'
-        '• нет пар',
+        f'📅 <b>РАСПИСАНИЕ НА СЕГОДНЯ ({today})</b>\n\n{classes_text}',
         parse_mode='HTML'
     )
 
@@ -154,9 +184,16 @@ async def tasks_by_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def all_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📋 Все задачи"""
+    user_id = update.effective_user.id
+    all_tasks_list = db.get_tasks(user_id)
+    
+    tasks_text = '\n'.join([
+        f"• <b>{t['name']}</b> ({t['date']}) - {t['status']}" + (f" | {t['category']}" if t['category'] else "")
+        for t in all_tasks_list
+    ]) if all_tasks_list else "• нет задач"
+    
     await update.message.reply_text(
-        '📋 <b>ВСЕ ЗАДАЧИ</b>\n\n'
-        '• нет задач',
+        f'📋 <b>ВСЕ ЗАДАЧИ</b>\n\n{tasks_text}',
         parse_mode='HTML'
     )
 
@@ -258,9 +295,33 @@ async def manage_classes(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """➕ Добавить пару"""
+    context.user_data['adding_class'] = True
     await update.message.reply_text(
         '➕ <b>ДОБАВИТЬ ПАРУ</b>\n\n'
-        'Эта функция вскоре будет реализована',
+        'Введи данные в формате:\n'
+        '<code>Название; дата (ДД.MM); время начала (ЧЧ:МM); время конца (ЧЧ:МM); аудитория; преподаватель</code>\n\n'
+        'Пример:\n'
+        '<code>Математика; 15.06; 09:00; 10:30; 305; Иванов И.И.</code>\n\n'
+        'Время конца, аудитория и преподаватель - необязательны.',
+        parse_mode='HTML'
+    )
+
+async def delete_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """🗑 Удалить пару"""
+    user_id = update.effective_user.id
+    classes = db.get_classes(user_id)
+    
+    if not classes:
+        await update.message.reply_text('❌ У тебя нет добавленных пар.')
+        return
+    
+    classes_list = '\n'.join([f"<b>{i+1}.</b> {c['name']} ({c['date']})" for i, c in enumerate(classes)])
+    context.user_data['deleting_class'] = True
+    
+    await update.message.reply_text(
+        f'🗑 <b>УДАЛИТЬ ПАРУ</b>\n\n'
+        f'Твои пары:\n{classes_list}\n\n'
+        f'Введи номер пары или её название для удаления:',
         parse_mode='HTML'
     )
 
@@ -284,9 +345,33 @@ async def manage_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """➕ Добавить задачу"""
+    context.user_data['adding_task'] = True
     await update.message.reply_text(
         '➕ <b>ДОБАВИТЬ ЗАДАЧУ</b>\n\n'
-        'Эта функция вскоре будет реализована',
+        'Введи данные в формате:\n'
+        '<code>Название; дата (ДД.MM); статус (выполнена/не выполнена); категория</code>\n\n'
+        'Пример:\n'
+        '<code>Курсовая по БД; 20.06; не выполнена; Учёба</code>\n\n'
+        'Категория - необязательна.',
+        parse_mode='HTML'
+    )
+
+async def delete_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """🗑 Удалить задачу"""
+    user_id = update.effective_user.id
+    tasks = db.get_tasks(user_id)
+    
+    if not tasks:
+        await update.message.reply_text('❌ У тебя нет добавленных задач.')
+        return
+    
+    tasks_list = '\n'.join([f"<b>{i+1}.</b> {t['name']} ({t['date']})" for i, t in enumerate(tasks)])
+    context.user_data['deleting_task'] = True
+    
+    await update.message.reply_text(
+        f'🗑 <b>УДАЛИТЬ ЗАДАЧУ</b>\n\n'
+        f'Твои задачи:\n{tasks_list}\n\n'
+        f'Введи номер задачи или её название для удаления:',
         parse_mode='HTML'
     )
 
@@ -294,7 +379,7 @@ def get_categories_menu():
     """Подменю управления категориями"""
     keyboard = [
         ['📋 Мои категории', '➕ Добавить категорию'],
-        ['✏️ Изменить категорию', '🗑 Удалить к��тегорию'],
+        ['✏️ Изменить категорию', '🗑 Удалить категорию'],
         ['🔙 Назад']
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -345,6 +430,103 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка всех сообщений из меню"""
     user_message = update.message.text
+    user_id = update.effective_user.id
+    
+    # Обработка добавления пары
+    if context.user_data.get('adding_class'):
+        try:
+            parts = [p.strip() for p in user_message.split(';')]
+            if len(parts) < 3:
+                await update.message.reply_text('❌ Ошибка формата! Укажи минимум: Название; дата; время начала')
+                return
+            
+            name = parts[0]
+            date = parts[1]
+            start_time = parts[2]
+            end_time = parts[3] if len(parts) > 3 else None
+            classroom = parts[4] if len(parts) > 4 else None
+            teacher = parts[5] if len(parts) > 5 else None
+            
+            if db.add_class(user_id, name, date, start_time, end_time, classroom, teacher):
+                await update.message.reply_text(f'✅ Пара "<b>{name}</b>" добавлена!', parse_mode='HTML')
+                context.user_data['adding_class'] = False
+                await show_main_menu(update, context)
+            else:
+                await update.message.reply_text('❌ Ошибка при добавлении пары.')
+        except Exception as e:
+            await update.message.reply_text(f'❌ Ошибка: {e}')
+        return
+    
+    # Обработка удаления пары
+    if context.user_data.get('deleting_class'):
+        classes = db.get_classes(user_id)
+        try:
+            # Пытаемся распарсить как номер
+            class_num = int(user_message) - 1
+            if 0 <= class_num < len(classes):
+                class_id = classes[class_num]['id']
+                if db.delete_class(user_id, class_id):
+                    await update.message.reply_text(f'✅ Пара удалена!', parse_mode='HTML')
+                    context.user_data['deleting_class'] = False
+                    await show_main_menu(update, context)
+                    return
+        except ValueError:
+            # Пытаемся удалить по названию
+            if db.delete_class_by_name(user_id, user_message):
+                await update.message.reply_text(f'✅ Пара удалена!', parse_mode='HTML')
+                context.user_data['deleting_class'] = False
+                await show_main_menu(update, context)
+                return
+        
+        await update.message.reply_text('❌ Пара не найдена.')
+        return
+    
+    # Обработка добавления задачи
+    if context.user_data.get('adding_task'):
+        try:
+            parts = [p.strip() for p in user_message.split(';')]
+            if len(parts) < 3:
+                await update.message.reply_text('❌ Ошибка формата! Укажи минимум: Название; дата; статус')
+                return
+            
+            name = parts[0]
+            date = parts[1]
+            status = parts[2]
+            category = parts[3] if len(parts) > 3 else None
+            
+            if db.add_task(user_id, name, date, status, category):
+                await update.message.reply_text(f'✅ Задача "<b>{name}</b>" добавлена!', parse_mode='HTML')
+                context.user_data['adding_task'] = False
+                await show_main_menu(update, context)
+            else:
+                await update.message.reply_text('❌ Ошибка при добавлении задачи.')
+        except Exception as e:
+            await update.message.reply_text(f'❌ Ошибка: {e}')
+        return
+    
+    # Обработка удаления задачи
+    if context.user_data.get('deleting_task'):
+        tasks = db.get_tasks(user_id)
+        try:
+            # Пытаемся распарсить как номер
+            task_num = int(user_message) - 1
+            if 0 <= task_num < len(tasks):
+                task_id = tasks[task_num]['id']
+                if db.delete_task(user_id, task_id):
+                    await update.message.reply_text(f'✅ Задача удалена!', parse_mode='HTML')
+                    context.user_data['deleting_task'] = False
+                    await show_main_menu(update, context)
+                    return
+        except ValueError:
+            # Пытаемся удалить по названию
+            if db.delete_task_by_name(user_id, user_message):
+                await update.message.reply_text(f'✅ Задача удалена!', parse_mode='HTML')
+                context.user_data['deleting_task'] = False
+                await show_main_menu(update, context)
+                return
+        
+        await update.message.reply_text('❌ Задача не найдена.')
+        return
     
     # Главное меню
     if user_message == '📊 Мой день':
@@ -408,7 +590,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif user_message == '✏️ Изменить пару':
         await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ПАРУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
     elif user_message == '🗑 Удалить пару':
-        await update.message.reply_text('🗑 <b>УДАЛИТЬ ПАРУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        await delete_class(update, context)
     
     # Управление задачами
     elif user_message == '➕ Добавить задачу':
@@ -416,7 +598,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif user_message == '✏️ Изменить задачу':
         await update.message.reply_text('✏️ <b>ИЗМЕНИТЬ ЗАДАЧУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
     elif user_message == '🗑 Удалить задачу':
-        await update.message.reply_text('🗑 <b>УДАЛИТЬ ЗАДАЧУ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
+        await delete_task(update, context)
     
     # Управление категориями
     elif user_message == '📋 Мои категории':
