@@ -151,6 +151,7 @@ def get_tasks_menu():
 
 async def tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """📝 Мои задачи - подменю"""
+    print(f"DEBUG: Функция tasks() вызвана. Текст: {update.message.text}")
     await update.message.reply_text(
         '📝 <b>МОИ ЗАДАЧИ</b>\n\n'
         'Выбери опцию:',
@@ -429,8 +430,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== ОБРАБОТЧИК СООБЩЕНИЙ ====================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка всех сообщений из меню"""
-    user_message = update.message.text
+    user_message = update.message.text.strip()
     user_id = update.effective_user.id
+    
+    # Логирование для отладки
+    print(f"DEBUG: Получено сообщение: '{user_message}' | Длина: {len(user_message)} | Код: {[ord(c) for c in user_message]}")
     
     # Обработка добавления пары
     if context.user_data.get('adding_class'):
@@ -528,18 +532,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('❌ Задача не найдена.')
         return
     
-    # Главное меню
-    if user_message == '📊 Мой день':
+    # Главное меню - используем in вместо ==
+    if 'Мой день' in user_message:
         await my_day(update, context)
-    elif user_message == '📅 Расписание':
+    elif 'Расписание' in user_message and 'Полный' not in user_message:
         await schedule(update, context)
-    elif user_message == '📝 Мои задачи':
+    elif 'Мои задачи' in user_message:
+        print("DEBUG: Распознано 'Мои задачи', вызываю tasks()")
         await tasks(update, context)
-    elif user_message == '📆 Полный календарь':
+    elif 'Полный календарь' in user_message:
         await calendar(update, context)
-    elif user_message == '🔧 Управление':
+    elif 'Управление' in user_message:
         await management(update, context)
-    elif user_message == 'ℹ️ Помощь':
+    elif 'Помощь' in user_message:
         await help_command(update, context)
     
     # Расписание
@@ -611,10 +616,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('🗑 <b>УДАЛИТЬ КАТЕГОРИЮ</b>\n\nЭта функция вскоре будет реализована', parse_mode='HTML')
     
     # Кнопка назад - показывает меню БЕЗ приветствия
-    elif user_message == '🔙 Назад в меню' or user_message == '🔙 Назад':
+    elif 'Назад' in user_message:
         await show_main_menu(update, context)
     
     else:
+        print(f"DEBUG: Сообщение не распознано: '{user_message}'")
         await update.message.reply_text('Не знаю такой команды. Используй меню выше 👆')
 
 # ==================== ОШИБКИ ====================
