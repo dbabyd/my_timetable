@@ -1,12 +1,20 @@
+
+---
+
+# 2) `database.py`
+
+Полностью замени содержимое `database.py` на это:
+
+```python
 import sqlite3
-import os
+from datetime import datetime
 from typing import List, Dict, Optional
 
 DB_FILE = "timetable.db"
 
 
 class Database:
-    """Работа с базой данных SQLite"""
+    """Класс для работы с базой данных"""
 
     def __init__(self):
         self.db_file = DB_FILE
@@ -16,6 +24,15 @@ class Database:
         conn = sqlite3.connect(self.db_file)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _date_expr(self, field_name: str = "date") -> str:
+        """
+        Преобразование даты из ДД.ММ.ГГГГ в YYYY-MM-DD для корректной сортировки и сравнения в SQLite.
+        """
+        return f"substr({field_name}, 7, 4) || '-' || substr({field_name}, 4, 2) || '-' || substr({field_name}, 1, 2)"
+
+    def _to_iso(self, date_str: str) -> str:
+        return datetime.strptime(date_str, "%d.%m.%Y").strftime("%Y-%m-%d")
 
     def init_db(self):
         conn = self.get_connection()
@@ -67,8 +84,10 @@ class Database:
     def _ensure_default_categories(self, user_id: int):
         conn = self.get_connection()
         cursor = conn.cursor()
+
         cursor.execute("SELECT COUNT(*) as cnt FROM categories WHERE user_id = ?", (user_id,))
         count = cursor.fetchone()["cnt"]
+
         if count == 0:
             defaults = [
                 ("Учёба", "📖"),
@@ -84,14 +103,22 @@ class Database:
                     (user_id, name, emoji),
                 )
             conn.commit()
+
         conn.close()
 
     # ==================== ПАРЫ ====================
 
-    def add_lesson(self, user_id: int, day_name: str, subject: str, time: str,
-                   room: str = "", teacher: str = "",
-                   reminder: str = "🚫 Не напоминать",
-                   repeat: str = "🚫 Без повтора") -> bool:
+    def add_lesson(
+        self,
+        user_id: int,
+        day_name: str,
+        subject: str,
+        time: str,
+        room: str = "",
+        teacher: str = "",
+        reminder: str = "🚫 Не напоминать",
+        repeat: str = "🚫 Без повтора",
+    ) -> bool:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -111,7 +138,8 @@ class Database:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, day_name, subject, time, room, teacher, reminder, repeat
-            FROM lessons WHERE user_id = ? AND day_name = ?
+            FROM lessons
+            WHERE user_id = ? AND day_name = ?
             ORDER BY time
         """, (user_id, day_name))
         rows = [dict(row) for row in cursor.fetchall()]
@@ -120,8 +148,10 @@ class Database:
 
     def get_all_lessons(self, user_id: int) -> Dict[str, List[Dict]]:
         result = {}
-        days = ["Понедельник", "Вторник", "Среда", "Четверг",
-                "Пятница", "Суббота", "Воскресенье"]
+        days = [
+            "Понедельник", "Вторник", "Среда", "Четверг",
+            "Пятница", "Суббота", "Воскресенье"
+        ]
         for day in days:
             lessons = self.get_lessons_by_day(user_id, day)
             if lessons:
@@ -133,8 +163,8 @@ class Database:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT DISTINCT day_name FROM lessons
-            WHERE user_id = ? ORDER BY
-            CASE day_name
+            WHERE user_id = ?
+            ORDER BY CASE day_name
                 WHEN 'Понедельник' THEN 1
                 WHEN 'Вторник' THEN 2
                 WHEN 'Среда' THEN 3
@@ -144,24 +174,27 @@ class Database:
                 WHEN 'Воскресенье' THEN 7
             END
         """, (user_id,))
-        days = [row["day_name"] for row in cursor.fetchall()]
+        result = [row["day_name"] for row in cursor.fetchall()]
         conn.close()
-        return days
+        return result
 
     def delete_lesson(self, user_id: int, lesson_id: int) -> Optional[Dict]:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, subject, time FROM lessons
+            SELECT id, subject, time
+            FROM lessons
             WHERE id = ? AND user_id = ?
         """, (lesson_id, user_id))
         row = cursor.fetchone()
+
         if row:
             result = dict(row)
             cursor.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
             conn.commit()
             conn.close()
             return result
+
         conn.close()
         return None
 
@@ -169,6 +202,7 @@ class Database:
         allowed = {"subject", "time", "room", "teacher", "reminder", "repeat"}
         if field not in allowed:
             return False
+
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -185,7 +219,8 @@ class Database:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, day_name, subject, time, room, teacher, reminder, repeat
-            FROM lessons WHERE id = ?
+            FROM lessons
+            WHERE id = ?
         """, (lesson_id,))
         row = cursor.fetchone()
         conn.close()
@@ -193,20 +228,31 @@ class Database:
 
     # ==================== ЗАДАЧИ ====================
 
-    def add_task(self, user_id: int, title: str, date: str,
-                 description: str = "", time: str = "",
-                 cat_name: str = "Без категории", cat_emoji: str = "📌",
-                 reminder: str = "🚫 Не напоминать",
-                 repeat: str = "🚫 Без повтора") -> bool:
+    def add_task(
+        self,
+        user_id: int,
+        title: str,
+        date: str,
+        description: str = "",
+        time: str = "",
+        cat_name: str = "Без категории",
+        cat_emoji: str = "📌",
+        reminder: str = "🚫 Не напоминать",
+        repeat: str = "🚫 Без повтора",
+    ) -> bool:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO tasks (user_id, title, description, date, time,
-                                   cat_name, cat_emoji, reminder, repeat)
+                INSERT INTO tasks (
+                    user_id, title, description, date, time,
+                    cat_name, cat_emoji, reminder, repeat
+                )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (user_id, title, description, date, time,
-                  cat_name, cat_emoji, reminder, repeat))
+            """, (
+                user_id, title, description, date, time,
+                cat_name, cat_emoji, reminder, repeat
+            ))
             conn.commit()
             conn.close()
             return True
@@ -217,11 +263,12 @@ class Database:
     def get_all_tasks(self, user_id: int) -> List[Dict]:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, title, description, date, time,
                    cat_name, cat_emoji, reminder, repeat
-            FROM tasks WHERE user_id = ?
-            ORDER BY date, time
+            FROM tasks
+            WHERE user_id = ?
+            ORDER BY {self._date_expr('date')}, time
         """, (user_id,))
         rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
@@ -233,7 +280,8 @@ class Database:
         cursor.execute("""
             SELECT id, title, description, date, time,
                    cat_name, cat_emoji, reminder, repeat
-            FROM tasks WHERE user_id = ? AND date = ?
+            FROM tasks
+            WHERE user_id = ? AND date = ?
             ORDER BY time
         """, (user_id, date))
         rows = [dict(row) for row in cursor.fetchall()]
@@ -241,14 +289,20 @@ class Database:
         return rows
 
     def get_tasks_by_date_range(self, user_id: int, start_date: str, end_date: str) -> List[Dict]:
+        start_iso = self._to_iso(start_date)
+        end_iso = self._to_iso(end_date)
+
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, title, description, date, time,
                    cat_name, cat_emoji, reminder, repeat
-            FROM tasks WHERE user_id = ? AND date >= ? AND date <= ?
-            ORDER BY date, time
-        """, (user_id, start_date, end_date))
+            FROM tasks
+            WHERE user_id = ?
+              AND {self._date_expr('date')} >= ?
+              AND {self._date_expr('date')} <= ?
+            ORDER BY {self._date_expr('date')}, time
+        """, (user_id, start_iso, end_iso))
         rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return rows
@@ -256,11 +310,12 @@ class Database:
     def get_tasks_by_category(self, user_id: int, cat_name: str, cat_emoji: str) -> List[Dict]:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, title, description, date, time,
                    cat_name, cat_emoji, reminder, repeat
-            FROM tasks WHERE user_id = ? AND cat_name = ? AND cat_emoji = ?
-            ORDER BY date, time
+            FROM tasks
+            WHERE user_id = ? AND cat_name = ? AND cat_emoji = ?
+            ORDER BY {self._date_expr('date')}, time
         """, (user_id, cat_name, cat_emoji))
         rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
@@ -270,24 +325,30 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, title, cat_emoji FROM tasks
+            SELECT id, title, cat_emoji
+            FROM tasks
             WHERE id = ? AND user_id = ?
         """, (task_id, user_id))
         row = cursor.fetchone()
+
         if row:
             result = dict(row)
             cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
             conn.close()
             return result
+
         conn.close()
         return None
 
     def update_task_field(self, task_id: int, field: str, value: str) -> bool:
-        allowed = {"title", "description", "date", "time",
-                    "cat_name", "cat_emoji", "reminder", "repeat"}
+        allowed = {
+            "title", "description", "date", "time",
+            "cat_name", "cat_emoji", "reminder", "repeat"
+        }
         if field not in allowed:
             return False
+
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -305,7 +366,8 @@ class Database:
         cursor.execute("""
             SELECT id, title, description, date, time,
                    cat_name, cat_emoji, reminder, repeat
-            FROM tasks WHERE id = ?
+            FROM tasks
+            WHERE id = ?
         """, (task_id,))
         row = cursor.fetchone()
         conn.close()
@@ -318,8 +380,10 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, name, emoji FROM categories
-            WHERE user_id = ? ORDER BY id
+            SELECT id, name, emoji
+            FROM categories
+            WHERE user_id = ?
+            ORDER BY id
         """, (user_id,))
         rows = [dict(row) for row in cursor.fetchall()]
         conn.close()
@@ -343,17 +407,28 @@ class Database:
     def delete_category(self, user_id: int, cat_id: int) -> Optional[Dict]:
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, name, emoji FROM categories WHERE id = ? AND user_id = ?",
-            (cat_id, user_id),
-        )
+        cursor.execute("""
+            SELECT id, name, emoji
+            FROM categories
+            WHERE id = ? AND user_id = ?
+        """, (cat_id, user_id))
         row = cursor.fetchone()
+
         if row:
-            result = dict(row)
+            category = dict(row)
+
+            # Все задачи этой категории переводим в "Без категории"
+            cursor.execute("""
+                UPDATE tasks
+                SET cat_name = 'Без категории', cat_emoji = '📌'
+                WHERE user_id = ? AND cat_name = ? AND cat_emoji = ?
+            """, (user_id, category["name"], category["emoji"]))
+
             cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
             conn.commit()
             conn.close()
-            return result
+            return category
+
         conn.close()
         return None
 
@@ -361,10 +436,34 @@ class Database:
         allowed = {"name", "emoji"}
         if field not in allowed:
             return False
+
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
+
+            cursor.execute("SELECT id, user_id, name, emoji FROM categories WHERE id = ?", (cat_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return False
+
+            old = dict(row)
+            old_name = old["name"]
+            old_emoji = old["emoji"]
+            user_id = old["user_id"]
+
             cursor.execute(f"UPDATE categories SET {field} = ? WHERE id = ?", (value, cat_id))
+
+            new_name = value if field == "name" else old_name
+            new_emoji = value if field == "emoji" else old_emoji
+
+            # Обновляем задачи, которые были привязаны к этой категории
+            cursor.execute("""
+                UPDATE tasks
+                SET cat_name = ?, cat_emoji = ?
+                WHERE user_id = ? AND cat_name = ? AND cat_emoji = ?
+            """, (new_name, new_emoji, user_id, old_name, old_emoji))
+
             conn.commit()
             conn.close()
             return True
@@ -389,7 +488,8 @@ class Database:
 
         cursor.execute("""
             SELECT day_name, time, subject, reminder
-            FROM lessons WHERE user_id = ? AND reminder != '🚫 Не напоминать'
+            FROM lessons
+            WHERE user_id = ? AND reminder != '🚫 Не напоминать'
             ORDER BY day_name, time
         """, (user_id,))
         for row in cursor.fetchall():
@@ -401,10 +501,11 @@ class Database:
                 "reminder": row["reminder"],
             })
 
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT title, date, time, cat_emoji, reminder
-            FROM tasks WHERE user_id = ? AND reminder != '🚫 Не напоминать'
-            ORDER BY date, time
+            FROM tasks
+            WHERE user_id = ? AND reminder != '🚫 Не напоминать'
+            ORDER BY {self._date_expr('date')}, time
         """, (user_id,))
         for row in cursor.fetchall():
             result.append({
